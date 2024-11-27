@@ -547,9 +547,8 @@ class MusicControlView(View):
         new_volume = max(current_volume - 10, 0)
         await vc.set_volume(new_volume)
         await interaction.response.send_message(f"🔉 Volume: {new_volume}%", ephemeral=True)
-bot = MusicBot()
 
-@bot.event
+
 
 async def start_server():
     app = web.Application()
@@ -557,18 +556,40 @@ async def start_server():
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, '0.0.0.0', int(os.getenv('PORT', 8080)))
-    await site.start()
+    await site.start()        
+
+bot = MusicBot()
+
+@bot.event
+
+
 
 
 async def on_ready():
     logger.info(f'Logged in as {bot.user.name} | {bot.user.id}')
-    await bot.add_cog(Music(bot))
+    # Add the Music cog if it hasn't been added yet
+    if 'Music' not in [cog.qualified_name for cog in bot.cogs.values()]:
+        await bot.add_cog(Music(bot))
+    logger.info("Music cog has been loaded")
 
 if __name__ == "__main__":
     async def start_bot():
-        await start_server()
-        await bot.start(os.getenv('BOT_TOKEN'))
+        try:
+            # Start the web server first
+            await start_server()
+            logger.info("Web server started successfully")
+            
+            # Start the bot
+            token = os.getenv('BOT_TOKEN')
+            if not token:
+                raise ValueError("BOT_TOKEN not found in environment variables")
+            
+            await bot.start(token)
+        except Exception as e:
+            logger.error(f"Failed to start bot: {e}")
+            raise
 
+    # Run everything
     asyncio.run(start_bot())
 
 
