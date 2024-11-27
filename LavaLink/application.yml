@@ -1,5 +1,5 @@
 server:
-  port: ${PORT}
+  port: 443
   address: 0.0.0.0
 lavalink:
   server:
@@ -12,10 +12,16 @@ lavalink:
       vimeo: true
       http: true
     bufferDurationMs: 400
-    youtubePlaylistLoadLimit: 6
+    youtubeConfig:
+      email: "jamesjamesmichaael34@gmail.com" # Add your YouTube account email
+      password: "pmhb cuuy jzpf ndum"
     playerUpdateInterval: 5
-    youtubeSearchEnabled: true
-    soundcloudSearchEnabled: true
+    lavaplayer:
+      nonAllocating: true
+      youtubeSearchEnabled: true
+      youtubeConfig:
+        email: "jamesjamesmichaael34@gmail.com" # Add your YouTube account email
+        password: "pmhb cuuy jzpf ndum"
     gc-warnings: true
 
 metrics:
