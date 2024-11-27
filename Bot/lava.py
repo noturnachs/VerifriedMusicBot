@@ -10,6 +10,9 @@ from typing import Optional
 import datetime
 from discord import Embed, Color
 from aiohttp import web
+from datetime import datetime, timedelta
+from discord.ext import commands, tasks
+
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -57,10 +60,81 @@ class Music(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.queue = {}  # Guild ID: List[Track]
+        self.alone_since = {}  # Guild ID: Time
+        self.check_alone.start()
         self.command_channels = {}  # Guild ID: Text Channel
 
         logger.info("Music cog initialized")
 
+    def cog_unload(self):
+        self.check_alone.cancel()  # Cancel the task when cog is unloaded
+
+    # Add this new task to check for alone status
+    @tasks.loop(seconds=30)  # Check every 30 seconds
+    async def check_alone(self):
+        try:
+            for guild in self.bot.guilds:
+                if guild.voice_client:
+                    vc = guild.voice_client
+                    channel = vc.channel
+                    
+                    # Count members (excluding bots)
+                    members = [m for m in channel.members if not m.bot]
+                    
+                    if not members:  # Bot is alone
+                        if guild.id not in self.alone_since:
+                            self.alone_since[guild.id] = datetime.now()
+                            logger.info(f"Bot is alone in {guild.name}, starting timer")
+                    else:
+                        # Reset timer if not alone
+                        self.alone_since.pop(guild.id, None)
+                        
+                    # Check if bot has been alone for more than 5 minutes
+                    if guild.id in self.alone_since:
+                        alone_time = datetime.now() - self.alone_since[guild.id]
+                        if alone_time > timedelta(minutes=5):
+                            logger.info(f"Bot has been alone for 5 minutes in {guild.name}, disconnecting")
+                            await vc.disconnect()
+                            if guild.id in self.queue:
+                                self.queue[guild.id].clear()
+                            self.alone_since.pop(guild.id)
+                            
+                            # Send message to the last used command channel
+                            if guild.id in self.command_channels:
+                                channel = self.command_channels[guild.id]
+                                await channel.send("👋 Left voice channel due to inactivity (no users present for 5 minutes)")
+        except Exception as e:
+            logger.error(f"Error in check_alone task: {e}")
+
+    @check_alone.before_loop
+    async def before_check_alone(self):
+        await self.bot.wait_until_ready()
+
+    # Add this to handle voice state updates
+    @commands.Cog.listener()
+    async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
+        try:
+            if member.bot:  # Ignore bot voice state changes
+                return
+
+            if before.channel:
+                guild = before.channel.guild
+                if guild.voice_client and guild.voice_client.channel == before.channel:
+                    # Check if bot is now alone
+                    members = [m for m in before.channel.members if not m.bot]
+                    if not members:
+                        self.alone_since[guild.id] = datetime.now()
+                        logger.info(f"Bot is now alone in {guild.name}")
+
+            if after.channel:
+                guild = after.channel.guild
+                if guild.voice_client and guild.voice_client.channel == after.channel:
+                    # Reset timer if someone joined
+                    self.alone_since.pop(guild.id, None)
+                    logger.info(f"Someone joined bot's channel in {guild.name}")
+
+        except Exception as e:
+            logger.error(f"Error in voice state update handler: {e}")
 
     @commands.command()
     async def pause(self, ctx: commands.Context):
