@@ -1,6 +1,0 @@
-discord.py
-python-dotenv
-youtube-search-python
-yt-dlp
-PyNaCl
-fake-useragent
