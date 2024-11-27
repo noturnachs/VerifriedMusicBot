@@ -8,6 +8,8 @@ import random
 import time
 from fake_useragent import UserAgent  # You'll need to install this: pip install fake-useragent
 import asyncio
+from datetime import datetime
+import socket
 
 
 
@@ -87,40 +89,57 @@ def get_ydl_opts():
         'no_warnings': True,
         'default_search': 'auto',
         'source_address': '0.0.0.0',
-        'extract_flat': True,
+        'extract_flat': False,
         'extractor_args': {
             'youtube': {
-                'skip': ['dash', 'hls'],
-                'player_client': ['android', 'web'],  # Randomize player client
-                'player_skip': ['configs', 'webpage']
+                'player_client': random.choice(['android', 'web', 'mweb']),
+                'player_skip': ['js', 'configs', 'webpage'],
+                'player_params': {'hl': 'en', 'gl': random.choice(['US', 'GB', 'CA', 'AU'])},
             },
         },
-        'socket_timeout': 10,
-        'retries': 3,
+        'socket_timeout': random.uniform(10, 15),
+        'retries': 5,
         'user_agent': headers['User-Agent'],
         'headers': headers,
-        'http_headers': headers
+        'http_headers': headers,
+        'age_limit': None,
+        'geo_bypass': True,
+        'geo_bypass_country': random.choice(['US', 'GB', 'CA', 'AU']),
     }
 
-async def extract_url_with_retry(ydl, video_url, max_retries=3):
+async def extract_url_with_retry(ydl, video_url, max_retries=5):
     for attempt in range(max_retries):
         try:
-            # Add random delay between attempts
             if attempt > 0:
-                await asyncio.sleep(random.uniform(1, 3))
+                delay = min(random.uniform(2, 4) * (2 ** attempt), 10)
+                await asyncio.sleep(delay)
             
-            info = ydl.extract_info(video_url, download=False)
-            url = info.get('url', None)
-            if not url:
-                formats = info.get('formats', [])
-                if formats:
-                    url = formats[0]['url']
-            if url:
-                return url
+            info = await asyncio.get_event_loop().run_in_executor(
+                None, 
+                lambda: ydl.extract_info(video_url, download=False)
+            )
+            
+            if 'url' in info:
+                return info['url']
+            elif 'formats' in info:
+                formats = info['formats']
+                formats.sort(key=lambda x: (
+                    x.get('asr', 0),
+                    x.get('filesize', 0) if x.get('filesize') is not None else float('inf')
+                ), reverse=True)
+                
+                for format in formats:
+                    if format.get('url'):
+                        return format['url']
+            
+            raise Exception("No suitable format found")
+            
         except Exception as e:
+            print(f"Attempt {attempt + 1} failed: {str(e)}")
             if attempt == max_retries - 1:
                 raise e
             continue
+    
     raise Exception("Could not extract audio URL after multiple attempts")
 
 @bot.event
