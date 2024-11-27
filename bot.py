@@ -4,6 +4,10 @@ import os
 from dotenv import load_dotenv
 import yt_dlp as youtube_dl  # Change this line
 from youtubesearchpython import VideosSearch
+import random
+import time
+from fake_useragent import UserAgent  # You'll need to install this: pip install fake-useragent
+import asyncio
 
 
 
@@ -17,22 +21,107 @@ queue = MusicQueue()
 
 load_dotenv() 
 
+USER_AGENTS = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Safari/605.1.15',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36 Edg/92.0.902.55',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.131 Safari/537.36',
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36',
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 14_7_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.2 Mobile/15E148 Safari/604.1',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Edge/120.0.0.0'
+]
+
+REFERRERS = [
+    'https://www.google.com/',
+    'https://www.bing.com/',
+    'https://search.yahoo.com/',
+    'https://duckduckgo.com/',
+    'https://www.youtube.com/',
+    'https://music.youtube.com/'
+]
+
+def get_random_headers():
+    try:
+        ua = UserAgent()
+        user_agent = ua.random
+    except:
+        user_agent = random.choice(USER_AGENTS)
+    
+    return {
+        'User-Agent': user_agent,
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': f'en-US,en;q={random.uniform(0.8, 1.0):.1f}',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'DNT': '1',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Sec-Fetch-User': '?1',
+        'Sec-CH-UA': '" Not A;Brand";v="99", "Chromium";v="120", "Google Chrome";v="120"',
+        'Sec-CH-UA-Mobile': '?0',
+        'Sec-CH-UA-Platform': '"Windows"',
+        'Referer': random.choice(REFERRERS),
+        'Cache-Control': 'max-age=0'
+    }
+
 # Set up the bot
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-ydl_opts = {
-    'format': 'bestaudio/best',
-    'noplaylist': True,
-    'nocheckcertificate': True,
-    'ignoreerrors': False,
-    'logtostderr': False,
-    'quiet': True,
-    'no_warnings': True,
-    'default_search': 'auto',
-    'source_address': '0.0.0.0'
-}
+def get_ydl_opts():
+    headers = get_random_headers()
+    return {
+        'format': 'bestaudio/best',
+        'noplaylist': True,
+        'nocheckcertificate': True,
+        'ignoreerrors': False,
+        'logtostderr': False,
+        'quiet': True,
+        'no_warnings': True,
+        'default_search': 'auto',
+        'source_address': '0.0.0.0',
+        'extract_flat': True,
+        'extractor_args': {
+            'youtube': {
+                'skip': ['dash', 'hls'],
+                'player_client': ['android', 'web'],  # Randomize player client
+                'player_skip': ['configs', 'webpage']
+            },
+        },
+        'socket_timeout': 10,
+        'retries': 3,
+        'user_agent': headers['User-Agent'],
+        'headers': headers,
+        'http_headers': headers
+    }
+
+async def extract_url_with_retry(ydl, video_url, max_retries=3):
+    for attempt in range(max_retries):
+        try:
+            # Add random delay between attempts
+            if attempt > 0:
+                await asyncio.sleep(random.uniform(1, 3))
+            
+            info = ydl.extract_info(video_url, download=False)
+            url = info.get('url', None)
+            if not url:
+                formats = info.get('formats', [])
+                if formats:
+                    url = formats[0]['url']
+            if url:
+                return url
+        except Exception as e:
+            if attempt == max_retries - 1:
+                raise e
+            continue
+    raise Exception("Could not extract audio URL after multiple attempts")
 
 @bot.event
 async def on_ready():
@@ -77,20 +166,23 @@ async def play(ctx, *, query):
 
 
 
+        with youtube_dl.YoutubeDL(get_ydl_opts()) as ydl:
+            try:
+                url = await extract_url_with_retry(ydl, video_url)
+            except Exception as e:
+                await ctx.send(f"Failed to process video. Try another song or try again later.")
+                return
+
+        # Add small random delay before playing
+        await asyncio.sleep(random.uniform(0.5, 1.5))
+
         FFMPEG_OPTIONS = {
             'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
             'options': '-vn'
         }
 
-         # Update this line with your FFmpeg path
-        FFMPEG_PATH = "E:/ffmpeg/bin/ffmpeg.exe" 
-
-        with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(video_url, download=False)
-            url = info['url']  # Changed from formats[0]['url']
-        # Play the audio
         voice_client = ctx.voice_client
-        voice_client.play(discord.FFmpegPCMAudio(url, executable=FFMPEG_PATH, **FFMPEG_OPTIONS))
+        voice_client.play(discord.FFmpegPCMAudio(url, **FFMPEG_OPTIONS))
         
         await ctx.send(f"Now playing: {results[0]['title']}")
 
@@ -159,20 +251,24 @@ async def resume(ctx):
         ctx.voice_client.resume()
         await ctx.send("Resumed ▶️")
 
-# Helper function to play songs
 async def play_song(ctx, url):
     FFMPEG_OPTIONS = {
         'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
         'options': '-vn'
     }
-    FFMPEG_PATH = "E:/ffmpeg/bin/ffmpeg.exe"
 
-    with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+    # Check if running in Docker (you can set this env var in your Dockerfile)
+    if os.getenv('DOCKER_ENV'):
+        ffmpeg_path = 'ffmpeg'  # Use global ffmpeg in Docker
+    else:
+        ffmpeg_path = "E:/ffmpeg/bin/ffmpeg.exe"  # Local Windows path
+
+    with youtube_dl.YoutubeDL(get_ydl_opts()) as ydl:
         info = ydl.extract_info(url, download=False)
         url = info['url']
     
     voice_client = ctx.voice_client
-    voice_client.play(discord.FFmpegPCMAudio(url, executable=FFMPEG_PATH, **FFMPEG_OPTIONS),
+    voice_client.play(discord.FFmpegPCMAudio(url, executable=ffmpeg_path, **FFMPEG_OPTIONS),
                      after=lambda e: bot.loop.create_task(play_next(ctx)))
 
 async def play_next(ctx):
