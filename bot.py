@@ -92,19 +92,25 @@ def get_ydl_opts():
         'extract_flat': False,
         'extractor_args': {
             'youtube': {
-                'player_client': random.choice(['android', 'web', 'mweb']),
-                'player_skip': ['js', 'configs', 'webpage'],
-                'player_params': {'hl': 'en', 'gl': random.choice(['US', 'GB', 'CA', 'AU'])},
+                'skip': ['dash', 'hls'],
+                'player_client': ['android', 'web'],  # Randomize player client
+                'player_skip': ['configs', 'webpage']
             },
         },
-        'socket_timeout': random.uniform(10, 15),
-        'retries': 5,
+        'socket_timeout': 10,
+        'retries': 3,
         'user_agent': headers['User-Agent'],
         'headers': headers,
         'http_headers': headers,
-        'age_limit': None,
-        'geo_bypass': True,
-        'geo_bypass_country': random.choice(['US', 'GB', 'CA', 'AU']),
+        # Add these options for better compatibility
+        'prefer_insecure': True,
+        'legacy_server_connect': True,
+        'force_generic_extractor': False,
+        'rm_cachedir': True,
+        'updatetime': False,
+        # Add these for better format handling
+        'format_sort': ['asr', 'filesize'],
+        'merge_output_format': 'mp3'
     }
 
 async def extract_url_with_retry(ydl, video_url, max_retries=5):
@@ -145,6 +151,9 @@ async def extract_url_with_retry(ydl, video_url, max_retries=5):
 @bot.event
 async def on_ready():
     print(f'{bot.user} has connected to Discord!')
+    # Update yt-dlp on startup
+    if os.getenv('DOCKER_ENV'):
+        os.system('pip install -U yt-dlp')
 
 @bot.command()
 async def play(ctx, *, query):
