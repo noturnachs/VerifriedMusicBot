@@ -79,6 +79,37 @@ class Music(commands.Cog):
                 await channel.send(f"⚠️ Error playing track: {payload.exception}")
 
     @commands.command()
+    async def status(self, ctx: commands.Context):
+        """Check the status of the Lavalink connection"""
+        try:
+            node = wavelink.Pool.get_node()
+            if node:
+                status_info = {
+                    "Node Connected": True,
+                    "Node URI": node.uri,
+                    "Node Status": node.status,
+                    "Players": len(node.players),
+                    "Voice Connected": ctx.voice_client is not None,
+                    "Playing": ctx.voice_client.playing if ctx.voice_client else False
+                }
+            else:
+                status_info = {"Node Connected": False}
+                
+            await ctx.send(f"Lavalink Status:\n```python\n{status_info}\n```")
+            
+            # Try to get version info
+            if node:
+                try:
+                    version = await node.fetch_version()
+                    await ctx.send(f"Lavalink Version: {version}")
+                except Exception as e:
+                    await ctx.send(f"Could not fetch version: {e}")
+                    
+        except Exception as e:
+            logger.error(f"Error in status command: {e}")
+            await ctx.send(f"Error getting status: {e}")
+
+    @commands.command()
     async def play(self, ctx: commands.Context, *, search: str):
         try:
             if not ctx.voice_client:
@@ -97,34 +128,26 @@ class Music(commands.Cog):
 
             logger.info(f"Searching for: {search}")
             
-            try:
-                # First attempt to search
-                tracks = await wavelink.Pool.fetch_tracks(search)
-                if not tracks:
-                    await ctx.send("Could not find any songs with that query.")
-                    return
-                
-                track = tracks[0]  # Get the first track
-                logger.info(f"Found track: {track.title} ({track.uri})")
+            # Search for the track
+            tracks = await wavelink.Pool.fetch_tracks(search)
+            if not tracks:
+                return await ctx.send("Could not find any songs with that query.")
+            
+            track = tracks[0]  # Get the first track
+            logger.info(f"Found track: {track.title} ({track.uri})")
 
-                if not vc.playing:
-                    await vc.play(track)
-                    await vc.set_volume(100)  # Set volume to maximum
-                    await ctx.send(f"🎵 Now playing: **{track.title}**")
-                    logger.info(f"Started playing: {track.title}")
-                else:
-                    # Add to queue
-                    if ctx.guild.id not in self.queue:
-                        self.queue[ctx.guild.id] = []
-                    self.queue[ctx.guild.id].append(track)
-                    await ctx.send(f"Added to queue: **{track.title}**")
-                    logger.info(f"Added to queue: {track.title}")
-
-            except wavelink.exceptions.LavalinkLoadException as e:
-                if "Please sign in" in str(e):
-                    await ctx.send("⚠️ This video requires age verification. Please try a different video.")
-                else:
-                    raise
+            if not vc.playing:
+                await vc.play(track)
+                await vc.set_volume(100)  # Set volume to maximum
+                logger.info(f"Started playing: {track.title}")
+                await ctx.send(f"🎵 Now playing: **{track.title}**")
+            else:
+                # Add to queue
+                if ctx.guild.id not in self.queue:
+                    self.queue[ctx.guild.id] = []
+                self.queue[ctx.guild.id].append(track)
+                await ctx.send(f"Added to queue: **{track.title}**")
+                logger.info(f"Added to queue: {track.title}")
 
         except Exception as e:
             logger.error(f"Error in play command: {e}", exc_info=True)
