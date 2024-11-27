@@ -9,6 +9,7 @@ from discord.ui import Button, View
 from typing import Optional
 import datetime
 from discord import Embed, Color
+from aiohttp import web
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -549,9 +550,26 @@ class MusicControlView(View):
 bot = MusicBot()
 
 @bot.event
+
+async def start_server():
+    app = web.Application()
+    app.router.add_get("/", lambda request: web.Response(text="Bot is alive!"))
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', int(os.getenv('PORT', 8080)))
+    await site.start()
+
+
 async def on_ready():
     logger.info(f'Logged in as {bot.user.name} | {bot.user.id}')
     await bot.add_cog(Music(bot))
 
 if __name__ == "__main__":
-    bot.run(os.getenv('BOT_TOKEN'))
+    async def start_bot():
+        await start_server()
+        await bot.start(os.getenv('BOT_TOKEN'))
+
+    asyncio.run(start_bot())
+
+
+
