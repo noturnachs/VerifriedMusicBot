@@ -183,14 +183,11 @@ async def play(ctx, *, query):
         elif ctx.voice_client.channel != voice_channel:
             await ctx.voice_client.move_to(voice_channel)
 
-
-
-        with youtube_dl.YoutubeDL(get_ydl_opts()) as ydl:
-            try:
-                url = await extract_url_with_retry(ydl, video_url)
-            except Exception as e:
-                await ctx.send(f"Failed to process video. Try another song or try again later.")
-                return
+        try:
+            url = await extract_url_with_fallback(ctx, video_url)
+        except Exception as e:
+            await ctx.send(f"Failed to process video. Try another song or try again later.")
+            return
 
         # Add small random delay before playing
         await asyncio.sleep(random.uniform(0.5, 1.5))
@@ -207,6 +204,13 @@ async def play(ctx, *, query):
 
         queue.current = song_info
 
+    except youtube_dl.utils.DownloadError as e:
+        if "Video unavailable" in str(e):
+            await ctx.send("This video is unavailable. It might be age-restricted or region-locked.")
+        elif "Sign in to confirm your age" in str(e):
+            await ctx.send("This video is age-restricted and cannot be played.")
+        else:
+            await ctx.send(f"Failed to download: {str(e)}")
     except Exception as e:
         await ctx.send(f"An error occurred: {str(e)}")
 
@@ -223,12 +227,16 @@ async def skip(ctx):
         return
 
     ctx.voice_client.stop()
-    await ctx.send("Skipped current song!")
+    await ctx.send("⏭️ Skipped current song!")
     
     # Play next song if queue isn't empty
     if queue.queue:
-        next_song = queue.queue.pop(0)
+        next_song = queue.queue[0]  # Peek at next song without removing it yet
+        await ctx.send(f"⏳ Next Song: {next_song['title']}")
+        next_song = queue.queue.pop(0)  # Now remove it
         await play_song(ctx, next_song['url'])
+    else:
+        await ctx.send("Queue is empty!")
 
 @bot.command(name='queue_list', aliases=['q'])
 async def queue_list(ctx):
@@ -276,26 +284,56 @@ async def play_song(ctx, url):
         'options': '-vn'
     }
 
-    # Check if running in Docker (you can set this env var in your Dockerfile)
     if os.getenv('DOCKER_ENV'):
-        ffmpeg_path = 'ffmpeg'  # Use global ffmpeg in Docker
+        ffmpeg_path = 'ffmpeg'
     else:
-        ffmpeg_path = "E:/ffmpeg/bin/ffmpeg.exe"  # Local Windows path
+        ffmpeg_path = "E:/ffmpeg/bin/ffmpeg.exe"
 
-    with youtube_dl.YoutubeDL(get_ydl_opts()) as ydl:
-        info = ydl.extract_info(url, download=False)
-        url = info['url']
-    
-    voice_client = ctx.voice_client
-    voice_client.play(discord.FFmpegPCMAudio(url, executable=ffmpeg_path, **FFMPEG_OPTIONS),
-                     after=lambda e: bot.loop.create_task(play_next(ctx)))
+    try:
+        url = await extract_url_with_fallback(ctx, url)
+        voice_client = ctx.voice_client
+        voice_client.play(discord.FFmpegPCMAudio(url, executable=ffmpeg_path, **FFMPEG_OPTIONS),
+                         after=lambda e: bot.loop.create_task(play_next(ctx)))
+    except youtube_dl.utils.DownloadError as e:
+        if "Video unavailable" in str(e):
+            await ctx.send("This video is unavailable. It might be age-restricted or region-locked.")
+        elif "Sign in to confirm your age" in str(e):
+            await ctx.send("This video is age-restricted and cannot be played.")
+        else:
+            await ctx.send(f"Failed to download: {str(e)}")
+        # Try to play next song if this one fails
+        await play_next(ctx)
+    except Exception as e:
+        await ctx.send(f"An error occurred: {str(e)}")
+        await play_next(ctx)
 
 async def play_next(ctx):
     """Automatically play the next song in the queue"""
     if queue.queue:
-        next_song = queue.queue.pop(0)
+        next_song = queue.queue[0]  # Peek at next song without removing it yet
+        await ctx.send(f"🎵 Now Playing: {next_song['title']}")
+        next_song = queue.queue.pop(0)  # Now remove it
         queue.current = next_song
         await play_song(ctx, next_song['url'])
+    else:
+        queue.current = None
+        await ctx.send("Queue finished! 🎵")
+
+async def extract_url_with_fallback(ctx, video_url):
+    try:
+        with youtube_dl.YoutubeDL(get_ydl_opts()) as ydl:
+            return await extract_url_with_retry(ydl, video_url)
+    except Exception as e:
+        print(f"First attempt failed: {str(e)}")
+        # Try alternate options if first attempt fails
+        fallback_opts = get_ydl_opts()
+        fallback_opts['format'] = 'worstaudio/worst'  # Try lower quality
+        try:
+            with youtube_dl.YoutubeDL(fallback_opts) as ydl:
+                return await extract_url_with_retry(ydl, video_url)
+        except Exception as e2:
+            print(f"Fallback attempt failed: {str(e2)}")
+            raise e2  # Re-raise the error if both attempts fail
 
 # Replace with your token
 bot.run(os.getenv('BOT_TOKEN'))
