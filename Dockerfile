@@ -18,5 +18,5 @@ COPY . .
 # Make start script executable
 RUN chmod +x start.sh
 
-# Command to run the application
+# Command to run the applicatio
 CMD ["./start.sh"]
