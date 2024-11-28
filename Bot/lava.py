@@ -275,6 +275,10 @@ class Music(commands.Cog):
                 return await ctx.send("❌ No songs found!")
             
             track = tracks[0]
+
+             # Check if track is longer than 10 minutes (600000 milliseconds)
+            if track.length > 600000:  # 10 minutes in milliseconds
+                return await ctx.send("❌ Song is too long! Please choose a song under 10 minutes.")
             
             # Create embed
             embed = discord.Embed(
@@ -459,41 +463,41 @@ class Music(commands.Cog):
             logger.error(f"Error in debug command: {e}")
             await ctx.send("Error getting debug information.")
 
-    @commands.command()
-    async def playurl(self, ctx: commands.Context, *, url: str):
-        """Play a song using direct URL"""
-        try:
-            if not ctx.voice_client:
-                if not ctx.author.voice:
-                    return await ctx.send("You need to be in a voice channel!")
-                vc = await ctx.author.voice.channel.connect(cls=wavelink.Player)
-                logger.info(f"Connected to voice channel: {ctx.author.voice.channel.name}")
-            else:
-                vc = ctx.voice_client
+    # @commands.command()
+    # async def playurl(self, ctx: commands.Context, *, url: str):
+    #     """Play a song using direct URL"""
+    #     try:
+    #         if not ctx.voice_client:
+    #             if not ctx.author.voice:
+    #                 return await ctx.send("You need to be in a voice channel!")
+    #             vc = await ctx.author.voice.channel.connect(cls=wavelink.Player)
+    #             logger.info(f"Connected to voice channel: {ctx.author.voice.channel.name}")
+    #         else:
+    #             vc = ctx.voice_client
 
-            # Use search instead of from_url for Wavelink 3.4.1
-            tracks = await wavelink.Playable.search(url)
-            if not tracks:
-                return await ctx.send("Could not load the track.")
+    #         # Use search instead of from_url for Wavelink 3.4.1
+    #         tracks = await wavelink.Playable.search(url)
+    #         if not tracks:
+    #             return await ctx.send("Could not load the track.")
             
-            track = tracks[0]  # Get the first track
-            logger.info(f"Found track: {track.title} ({track.uri})")
+    #         track = tracks[0]  # Get the first track
+    #         logger.info(f"Found track: {track.title} ({track.uri})")
 
-            if not vc.playing:
-                await vc.play(track)
-                await vc.set_volume(100)  # Set volume to maximum
-                logger.info(f"Started playing: {track.title}")
-                await ctx.send(f"🎵 Now playing: **{track.title}**")
-            else:
-                if ctx.guild.id not in self.queue:
-                    self.queue[ctx.guild.id] = []
-                self.queue[ctx.guild.id].append(track)
-                await ctx.send(f"Added to queue: **{track.title}**")
-                logger.info(f"Added to queue: {track.title}")
+    #         if not vc.playing:
+    #             await vc.play(track)
+    #             await vc.set_volume(100)  # Set volume to maximum
+    #             logger.info(f"Started playing: {track.title}")
+    #             await ctx.send(f"🎵 Now playing: **{track.title}**")
+    #         else:
+    #             if ctx.guild.id not in self.queue:
+    #                 self.queue[ctx.guild.id] = []
+    #             self.queue[ctx.guild.id].append(track)
+    #             await ctx.send(f"Added to queue: **{track.title}**")
+    #             logger.info(f"Added to queue: {track.title}")
 
-        except Exception as e:
-            logger.error(f"Error in playurl command: {e}", exc_info=True)
-            await ctx.send("An error occurred while trying to play the track.")
+    #     except Exception as e:
+    #         logger.error(f"Error in playurl command: {e}", exc_info=True)
+    #         await ctx.send("An error occurred while trying to play the track.")
 
 class MusicControlView(View):
     def __init__(self):
