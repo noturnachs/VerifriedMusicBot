@@ -367,7 +367,7 @@ class Music(commands.Cog):
                 view = MusicControlView()
                 
                 # Send new message in the same channel as the command
-                await ctx.channel.send(embed=embed, view=view)
+                await ctx.send(embed=embed, view=view)
                 logger.info(f"Playing next track: {next_track.title} in guild {ctx.guild.id}")
                 
         except Exception as e:
@@ -613,35 +613,7 @@ class MusicControlView(View):
             embed.add_field(name="Duration", value=format_duration(next_track.length))
             
             view = MusicControlView()
-            await interaction.channel.send(embed=embed, view=view)
-            if not interaction.guild.voice_client:
-                return await interaction.response.send_message("❌ Not playing anything!", ephemeral=True)
-            
-            vc = interaction.guild.voice_client
-            guild_id = interaction.guild.id
-            
-            # Get reference to the Music cog
-            music_cog = interaction.client.get_cog('Music')
-            if not music_cog:
-                return await interaction.response.send_message("❌ Music system is not ready!", ephemeral=True)
-            
-            await vc.stop()
-            await interaction.response.send_message("⏭️ Skipped!", ephemeral=True)
-            
-            # Play next song if available
-            if guild_id in music_cog.queue and music_cog.queue[guild_id]:
-                next_track = music_cog.queue[guild_id].pop(0)
-                await vc.play(next_track)
-                
-                embed = discord.Embed(
-                    title="🎵 Now Playing",
-                    description=f"**{next_track.title}**",
-                    color=discord.Color.blue()
-                )
-                embed.add_field(name="Duration", value=format_duration(next_track.length))
-                
-                view = MusicControlView()
-                await interaction.followup.send(embed=embed, view=view)
+            await interaction.followup.send(embed=embed, view=view)
 
     async def stop_callback(self, interaction: discord.Interaction):
         if not interaction.guild.voice_client:
