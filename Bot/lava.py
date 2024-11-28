@@ -149,10 +149,10 @@ class Music(commands.Cog):
 
             # Toggle pause state
             if vc.paused:
-                await vc.resume()
+                await vc.pause(False)  # Resume by setting pause to False
                 await ctx.send("▶️ Resumed")
             else:
-                await vc.pause()
+                await vc.pause(True)   # Pause by setting pause to True
                 await ctx.send("⏸️ Paused")
                 
         except Exception as e:
