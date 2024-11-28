@@ -443,10 +443,12 @@ class Music(commands.Cog):
             if ctx.voice_client:
                 vc = ctx.voice_client
                 status = {
-                    "Connected": vc.is_connected(),
+                    "Connected": vc.connected,  # Changed from is_connected()
                     "Playing": vc.playing,
                     "Channel": vc.channel.name if vc.channel else "None",
-                    "Volume": vc.volume
+                    "Volume": vc.volume,
+                    "Paused": vc.paused,
+                    "Current Track": vc.current.title if vc.current else "None"
                 }
                 await ctx.send(f"Voice Client Status:\n```python\n{status}\n```")
             else:
@@ -651,7 +653,7 @@ async def on_ready():
         status=discord.Status.online,
         activity=activity
     )
-    
+
     if 'Music' not in [cog.qualified_name for cog in bot.cogs.values()]:
         await bot.add_cog(Music(bot))
     logger.info("Music cog has been loaded")
