@@ -642,6 +642,16 @@ bot = MusicBot()
 async def on_ready():
     logger.info(f'Logged in as {bot.user.name} | {bot.user.id}')
     # Add the Music cog if it hasn't been added yet
+
+    activity = discord.Activity(
+        type=discord.ActivityType.listening,
+        name="!play | Music Bot"
+    )
+    await bot.change_presence(
+        status=discord.Status.online,
+        activity=activity
+    )
+    
     if 'Music' not in [cog.qualified_name for cog in bot.cogs.values()]:
         await bot.add_cog(Music(bot))
     logger.info("Music cog has been loaded")
