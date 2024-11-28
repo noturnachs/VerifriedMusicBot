@@ -223,34 +223,36 @@ class Music(commands.Cog):
 
     @commands.command()
     async def status(self, ctx: commands.Context):
-        """Check the status of the Lavalink connection"""
+        """Check the status of the music bot"""
         try:
             node = wavelink.Pool.get_node()
             if node:
                 status_info = {
-                    "Node Connected": True,
-                    "Node URI": node.uri,
-                    "Node Status": node.status,
-                    "Players": len(node.players),
+                    "Bot Connected": True,
                     "Voice Connected": ctx.voice_client is not None,
-                    "Playing": ctx.voice_client.playing if ctx.voice_client else False
+                    "Currently Playing": ctx.voice_client.playing if ctx.voice_client else False
                 }
             else:
-                status_info = {"Node Connected": False}
+                status_info = {"Bot Connected": False}
                 
-            await ctx.send(f"Lavalink Status:\n```python\n{status_info}\n```")
+            # Create a clean status message
+            embed = discord.Embed(
+                title="🎵 Music Bot Status",
+                color=discord.Color.blue()
+            )
             
-            # Try to get version info
-            if node:
-                try:
-                    version = await node.fetch_version()
-                    await ctx.send(f"Lavalink Version: {version}")
-                except Exception as e:
-                    await ctx.send(f"Could not fetch version: {e}")
-                    
+            for key, value in status_info.items():
+                embed.add_field(
+                    name=key,
+                    value="✅" if value else "❌",
+                    inline=True
+                )
+                
+            await ctx.send(embed=embed)
+                
         except Exception as e:
             logger.error(f"Error in status command: {e}")
-            await ctx.send(f"Error getting status: {e}")
+            await ctx.send("❌ Error getting status")
 
     @commands.command()
     async def play(self, ctx: commands.Context, *, search: str):
