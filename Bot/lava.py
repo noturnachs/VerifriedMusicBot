@@ -63,7 +63,7 @@ class Music(commands.Cog):
         self.alone_since = {}  # Guild ID: Time
         self.check_alone.start()
         self.command_channels = {}  # Guild ID: Text Channel
-
+        self.skip_flags = {}  # Add this to track skip states
         logger.info("Music cog initialized")
 
     def cog_unload(self):
@@ -168,13 +168,15 @@ class Music(commands.Cog):
         """Handle track end event and play next song in queue if available"""
         try:
             guild_id = payload.player.guild.id
-            # Only auto-play next track if it wasn't triggered by a skip command
-            if (guild_id in self.queue and self.queue[guild_id] and 
-                payload.reason != 'STOPPED'):  # Add this check
+            
+            # Don't send messages if this was triggered by a skip command
+            if guild_id in self.skip_flags and self.skip_flags[guild_id]:
+                return
+                
+            if guild_id in self.queue and self.queue[guild_id]:
                 next_track = self.queue[guild_id].pop(0)
                 await payload.player.play(next_track)
                 
-                # Use the stored command channel
                 if guild_id in self.command_channels:
                     channel = self.command_channels[guild_id]
                     embed = discord.Embed(
@@ -186,7 +188,6 @@ class Music(commands.Cog):
                     
                     view = MusicControlView()
                     await channel.send(embed=embed, view=view)
-                    logger.info(f"Auto-playing next track: {next_track.title} in guild {guild_id}")
                 
         except Exception as e:
             logger.error(f"Error in track end event handler: {e}")
@@ -344,20 +345,21 @@ class Music(commands.Cog):
             if not vc.playing:
                 return await ctx.send("Nothing is playing!")
 
+            # Set skip flag
+            self.skip_flags[ctx.guild.id] = True
+            
             # Store the channel where the command was used
             self.command_channels[ctx.guild.id] = ctx.channel
             
             # Stop current track
             await vc.stop()
             await ctx.send("⏭️ Skipped!")
-            logger.info(f"Skipped track in guild {ctx.guild.id}")
             
             # Play next song if available
             if ctx.guild.id in self.queue and self.queue[ctx.guild.id]:
                 next_track = self.queue[ctx.guild.id].pop(0)
                 await vc.play(next_track)
                 
-                # Create embed for next track
                 embed = discord.Embed(
                     title="🎵 Now Playing",
                     description=f"**{next_track.title}**",
@@ -365,12 +367,11 @@ class Music(commands.Cog):
                 )
                 embed.add_field(name="Duration", value=format_duration(next_track.length))
                 
-                # Create new view with buttons
                 view = MusicControlView()
-                
-                # Send new message in the same channel as the command
                 await ctx.send(embed=embed, view=view)
-                logger.info(f"Playing next track: {next_track.title} in guild {ctx.guild.id}")
+                
+            # Clear skip flag after handling
+            self.skip_flags[ctx.guild.id] = False
                 
         except Exception as e:
             logger.error(f"Error in skip command: {e}")
