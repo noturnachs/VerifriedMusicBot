@@ -362,38 +362,25 @@ class Music(commands.Cog):
 
     @commands.command()
     async def queue(self, ctx: commands.Context):
+        """Show the current music queue with pagination"""
         try:
             if ctx.guild.id not in self.queue or not self.queue[ctx.guild.id]:
                 return await ctx.send("📭 Queue is empty!")
             
-            # Create embed for queue
-            embed = discord.Embed(
-                title="📑 Current Queue",
-                color=discord.Color.blue()
-            )
-            
-            # Add current track
+            # Get current track if playing
+            current_track = None
             if ctx.voice_client and ctx.voice_client.playing:
-                current = ctx.voice_client.current
-                embed.add_field(
-                    name="Now Playing",
-                    value=f"**{current.title}**\n`Duration: {format_duration(current.length)}`",
-                    inline=False
-                )
+                current_track = ctx.voice_client.current
             
-            # Add queue tracks
-            queue_text = "\n".join(
-                f"`{i+1}.` {track.title} `[{format_duration(track.length)}]`"
-                for i, track in enumerate(self.queue[ctx.guild.id][:10])
+            # Create queue view with pagination
+            view = QueueView(
+                queue_list=self.queue[ctx.guild.id],
+                current_track=current_track
             )
-            if queue_text:
-                embed.add_field(name="Up Next", value=queue_text, inline=False)
             
-            if len(self.queue[ctx.guild.id]) > 10:
-                embed.set_footer(text=f"And {len(self.queue[ctx.guild.id]) - 10} more songs...")
-            
-            await ctx.send(embed=embed)
-            
+            # Send initial embed with view
+            await ctx.send(embed=view.get_embed(), view=view)
+                
         except Exception as e:
             logger.error(f"Error in queue command: {e}")
             await ctx.send("❌ An error occurred!")
@@ -469,6 +456,74 @@ class Music(commands.Cog):
     #     except Exception as e:
     #         logger.error(f"Error in playurl command: {e}", exc_info=True)
     #         await ctx.send("An error occurred while trying to play the track.")
+class QueueView(discord.ui.View):
+    def __init__(self, queue_list, current_track, per_page=10):
+        super().__init__(timeout=60)
+        self.queue_list = queue_list
+        self.current_track = current_track
+        self.per_page = per_page
+        self.current_page = 0
+        self.total_pages = max((len(queue_list) + per_page - 1) // per_page, 1)
+        
+        # Update button states
+        self.update_buttons()
+        
+    def update_buttons(self):
+        # Disable/Enable previous button
+        self.prev_button.disabled = self.current_page <= 0
+        # Disable/Enable next button
+        self.next_button.disabled = self.current_page >= self.total_pages - 1
+    
+    def get_embed(self):
+        start_idx = self.current_page * self.per_page
+        end_idx = start_idx + self.per_page
+        
+        embed = discord.Embed(
+            title="📑 Current Queue",
+            color=discord.Color.blue()
+        )
+        
+        # Add current track
+        if self.current_track:
+            embed.add_field(
+                name="Now Playing",
+                value=f"**{self.current_track.title}**\n`Duration: {format_duration(self.current_track.length)}`",
+                inline=False
+            )
+        
+        # Add queue tracks for current page
+        if self.queue_list:
+            queue_text = "\n".join(
+                f"`{i+1}.` {track.title} `[{format_duration(track.length)}]`"
+                for i, track in enumerate(self.queue_list[start_idx:end_idx], start=start_idx)
+            )
+            if queue_text:
+                embed.add_field(name="Up Next", value=queue_text, inline=False)
+        
+        # Add page info
+        if self.total_pages > 1:
+            embed.set_footer(text=f"Page {self.current_page + 1}/{self.total_pages}")
+        
+        return embed
+    
+    @discord.ui.button(label='◀️ Previous', style=discord.ButtonStyle.primary)
+    async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.current_page > 0:
+            self.current_page -= 1
+            self.update_buttons()
+            await interaction.response.edit_message(embed=self.get_embed(), view=self)
+        else:
+            await interaction.response.defer()
+    
+    @discord.ui.button(label='Next ▶️', style=discord.ButtonStyle.primary)
+    async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.current_page < self.total_pages - 1:
+            self.current_page += 1
+            self.update_buttons()
+            await interaction.response.edit_message(embed=self.get_embed(), view=self)
+        else:
+            await interaction.response.defer()
+
 
 class MusicControlView(View):
     def __init__(self):
