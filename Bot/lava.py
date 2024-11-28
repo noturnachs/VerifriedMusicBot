@@ -274,7 +274,7 @@ class Music(commands.Cog):
 
             # Check if it's a playlist URL
             if 'list=' in search:
-                # Fetch playlist tracks
+                # Playlist logic...
                 tracks = await wavelink.Pool.fetch_tracks(search)
                 if not tracks:
                     return await ctx.send("❌ No songs found in playlist!")
@@ -299,7 +299,7 @@ class Music(commands.Cog):
                              (f"\n⚠️ Skipped {skipped_tracks} tracks that were over 10 minutes" if skipped_tracks else ""))
                 
             else:
-                # Original single track logic
+                # Single track logic
                 if not search.startswith(('http://', 'https://')):
                     search = f'ytsearch:{search}'
 
@@ -311,8 +311,23 @@ class Music(commands.Cog):
                 if track.length > 600000:
                     return await ctx.send("❌ Song is too long! Please choose a song under 10 minutes.")
                 
-                # Rest of your existing single track play logic...
-                
+                # Play or add to queue
+                if not vc.playing:
+                    await vc.play(track)
+                    embed = discord.Embed(
+                        title="🎵 Now Playing",
+                        description=f"**{track.title}**",
+                        color=discord.Color.blue()
+                    )
+                    embed.add_field(name="Duration", value=format_duration(track.length))
+                    view = MusicControlView()
+                    await ctx.send(embed=embed, view=view)
+                else:
+                    if ctx.guild.id not in self.queue:
+                        self.queue[ctx.guild.id] = []
+                    self.queue[ctx.guild.id].append(track)
+                    await ctx.send(f"📑 Added to queue: **{track.title}**")
+            
         except Exception as e:
             logger.error(f"Error in play command: {e}", exc_info=True)
             await ctx.send("❌ An error occurred!")
