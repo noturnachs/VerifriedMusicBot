@@ -168,7 +168,9 @@ class Music(commands.Cog):
         """Handle track end event and play next song in queue if available"""
         try:
             guild_id = payload.player.guild.id
-            if guild_id in self.queue and self.queue[guild_id]:
+            # Only auto-play next track if it wasn't triggered by a skip command
+            if (guild_id in self.queue and self.queue[guild_id] and 
+                payload.reason != 'STOPPED'):  # Add this check
                 next_track = self.queue[guild_id].pop(0)
                 await payload.player.play(next_track)
                 
@@ -187,8 +189,8 @@ class Music(commands.Cog):
                     logger.info(f"Auto-playing next track: {next_track.title} in guild {guild_id}")
                 
         except Exception as e:
-            logger.error(f"Error in track end event handler: {e}")  
-            
+            logger.error(f"Error in track end event handler: {e}")
+
     @commands.Cog.listener()
     async def on_wavelink_node_ready(self, node):
         logger.info(f"Wavelink node '{node}' is ready!")
