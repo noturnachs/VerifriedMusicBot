@@ -136,9 +136,13 @@ class Music(commands.Cog):
         except Exception as e:
             logger.error(f"Error in voice state update handler: {e}")
 
+
+
+    
+
     @commands.command()
     async def pause(self, ctx: commands.Context):
-        """Pause or resume the current track"""
+        """Pause the current track"""
         try:
             if not ctx.voice_client:
                 return await ctx.send("❌ Not playing anything!")
@@ -147,16 +151,35 @@ class Music(commands.Cog):
             if not vc.playing and not vc.paused:
                 return await ctx.send("❌ Nothing is playing!")
 
-            # Toggle pause state
             if vc.paused:
-                await vc.pause(False)  # Resume by setting pause to False
-                await ctx.send("▶️ Resumed")
-            else:
-                await vc.pause(True)   # Pause by setting pause to True
-                await ctx.send("⏸️ Paused")
-                
+                return await ctx.send("⚠️ Music is already paused! Use !resume to continue playing.")
+            
+            await vc.pause(True)
+            await ctx.send("⏸️ Paused")
+            
         except Exception as e:
             logger.error(f"Error in pause command: {e}")
+            await ctx.send("❌ An error occurred!")
+
+    @commands.command()
+    async def resume(self, ctx: commands.Context):
+        """Resume the current track"""
+        try:
+            if not ctx.voice_client:
+                return await ctx.send("❌ Not playing anything!")
+            
+            vc = ctx.voice_client
+            if not vc.playing and not vc.paused:
+                return await ctx.send("❌ Nothing is playing!")
+
+            if not vc.paused:
+                return await ctx.send("⚠️ Music is already playing!")
+            
+            await vc.pause(False)  # Resume by setting pause to False
+            await ctx.send("▶️ Resumed")
+            
+        except Exception as e:
+            logger.error(f"Error in resume command: {e}")
             await ctx.send("❌ An error occurred!")
 
     @commands.Cog.listener()
@@ -474,6 +497,59 @@ class Music(commands.Cog):
     #     except Exception as e:
     #         logger.error(f"Error in playurl command: {e}", exc_info=True)
     #         await ctx.send("An error occurred while trying to play the track.")
+
+    @commands.command()
+    async def clear(self, ctx: commands.Context):
+        """Clear all songs from the queue"""
+        try:
+            if ctx.guild.id not in self.queue or not self.queue[ctx.guild.id]:
+                return await ctx.send("📭 Queue is already empty!")
+            
+            # Clear the queue
+            self.queue[ctx.guild.id].clear()
+            await ctx.send("🗑️ Queue has been cleared!")
+            logger.info(f"Queue cleared in guild {ctx.guild.id}")
+            
+        except Exception as e:
+            logger.error(f"Error in clear command: {e}")
+            await ctx.send("❌ An error occurred while clearing the queue!")
+
+    @commands.command(aliases=['rm'])
+    async def removesong(self, ctx: commands.Context, position: int):
+        """Remove a song from the queue by its position number
+        
+        Usage:
+        !removesong <number> - Remove song at position
+        !rm <number> - Shorthand for removesong
+        """
+        try:
+            if ctx.guild.id not in self.queue or not self.queue[ctx.guild.id]:
+                return await ctx.send("📭 Queue is empty!")
+            
+            # Check if position is valid
+            if position < 1 or position > len(self.queue[ctx.guild.id]):
+                return await ctx.send(f"❌ Please enter a valid position between 1 and {len(self.queue[ctx.guild.id])}")
+            
+            # Remove the song (adjust position by -1 since queue is 0-based)
+            removed_song = self.queue[ctx.guild.id].pop(position - 1)
+            
+            embed = discord.Embed(
+                title="🗑️ Removed from Queue",
+                description=f"**{removed_song.title}**",
+                color=discord.Color.blue()
+            )
+            embed.add_field(name="Position", value=f"#{position}")
+            embed.add_field(name="Duration", value=format_duration(removed_song.length))
+            
+            await ctx.send(embed=embed)
+            logger.info(f"Removed song {removed_song.title} from position {position} in guild {ctx.guild.id}")
+            
+        except ValueError:
+            await ctx.send("❌ Please enter a valid number!")
+        except Exception as e:
+            logger.error(f"Error in removesong command: {e}")
+            await ctx.send("❌ An error occurred while removing the song!")
+
 class QueueView(discord.ui.View):
     def __init__(self, queue_list, current_track, per_page=10):
         super().__init__(timeout=60)
